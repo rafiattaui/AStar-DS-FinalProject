@@ -4,7 +4,7 @@ import java.util.*;
 
 public class UnifiedDijkstra {
 
-    // Edge class representing a connection between nodes
+    // Edge class representing a directed edge with weight
     static class Edge {
         int to;
         double weight;
@@ -14,7 +14,7 @@ public class UnifiedDijkstra {
         }
     }
 
-    // Node class for Min-Heap Dijkstra
+    // MinHeap node for PriorityQueue
     static class MinHeapNode implements Comparable<MinHeapNode> {
         int vertex;
         double dist;
@@ -30,7 +30,7 @@ public class UnifiedDijkstra {
         }
     }
 
-    // Node class for Fibonacci Heap Dijkstra
+    // FibHeap node
     static class FibHeapNode {
         int vertex;
         double distance;
@@ -38,7 +38,7 @@ public class UnifiedDijkstra {
         int degree;
         boolean mark;
 
-        public FibHeapNode(int vertex, double distance) {
+        FibHeapNode(int vertex, double distance) {
             this.vertex = vertex;
             this.distance = distance;
             this.left = this;
@@ -46,11 +46,12 @@ public class UnifiedDijkstra {
         }
     }
 
-    // Fibonacci Heap class
+    // Fibonacci Heap Implementation
     static class FibonacciHeap {
-        private FibHeapNode min;
+        FibHeapNode min;
+        int n = 0;
 
-        public void insert(FibHeapNode node) {
+        void insert(FibHeapNode node) {
             if (min == null) {
                 min = node;
             } else {
@@ -59,48 +60,169 @@ public class UnifiedDijkstra {
                     min = node;
                 }
             }
+            n++;
         }
 
-        public FibHeapNode extractMin() {
+        FibHeapNode extractMin() {
             FibHeapNode z = min;
             if (z != null) {
                 if (z.child != null) {
-                    FibHeapNode x = z.child;
+                    FibHeapNode child = z.child;
+                    List<FibHeapNode> children = new ArrayList<>();
+                    FibHeapNode current = child;
                     do {
-                        FibHeapNode next = x.right;
-                        mergeLists(min, x);
+                        children.add(current);
+                        current = current.right;
+                    } while (current != child);
+
+                    for (FibHeapNode x : children) {
                         x.parent = null;
-                        x = next;
-                    } while (x != z.child);
+                        mergeLists(min, x);
+                    }
                 }
                 removeNode(z);
+                n--;
                 if (z == z.right) {
                     min = null;
                 } else {
                     min = z.right;
+                    consolidate();
                 }
             }
             return z;
         }
 
-        private void mergeLists(FibHeapNode a, FibHeapNode b) {
+        boolean isEmpty() {
+            return min == null;
+        }
+
+        // Decrease key operation
+        void decreaseKey(FibHeapNode node, double newDist) {
+            if (newDist >= node.distance) return;
+            node.distance = newDist;
+            FibHeapNode parent = node.parent;
+            if (parent != null && node.distance < parent.distance) {
+                cut(node, parent);
+                cascadingCut(parent);
+            }
+            if (node.distance < min.distance) {
+                min = node;
+            }
+        }
+
+        private void cut(FibHeapNode node, FibHeapNode parent) {
+            // Remove node from child list of parent
+            if (parent.child == node) {
+                if (node.right != node) {
+                    parent.child = node.right;
+                } else {
+                    parent.child = null;
+                }
+            }
+            removeNode(node);
+            parent.degree--;
+
+            // Add node to root list
+            node.parent = null;
+            node.mark = false;
+            mergeLists(min, node);
+        }
+
+        private void cascadingCut(FibHeapNode node) {
+            FibHeapNode parent = node.parent;
+            if (parent != null) {
+                if (!node.mark) {
+                    node.mark = true;
+                } else {
+                    cut(node, parent);
+                    cascadingCut(parent);
+                }
+            }
+        }
+
+        private void consolidate() {
+            if (min == null) return;
+
+            int maxDegree = (int) Math.floor(Math.log(n) / Math.log(2)) + 1;
+            FibHeapNode[] degreeTable = new FibHeapNode[maxDegree];
+
+            List<FibHeapNode> rootNodes = new ArrayList<>();
+            FibHeapNode current = min;
+            do {
+                rootNodes.add(current);
+                current = current.right;
+            } while (current != min);
+
+            for (FibHeapNode node : rootNodes) {
+                int d = node.degree;
+                while (degreeTable[d] != null) {
+                    FibHeapNode other = degreeTable[d];
+                    if (node.distance > other.distance) {
+                        FibHeapNode temp = node;
+                        node = other;
+                        other = temp;
+                    }
+                    link(node, other);
+                    degreeTable[d] = null;
+                    d++;
+                }
+                degreeTable[d] = node;
+            }
+
+            min = null;
+            for (FibHeapNode node : degreeTable) {
+                if (node != null) {
+                    node.left = node;
+                    node.right = node;
+                    if (min == null) {
+                        min = node;
+                    } else {
+                        mergeLists(min, node);
+                        if (node.distance < min.distance) {
+                            min = node;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void link(FibHeapNode parent, FibHeapNode child) {
+            // Remove child from root list
+            removeNode(child);
+            child.parent = parent;
+
+            if (parent.child == null) {
+                parent.child = child;
+                child.left = child;
+                child.right = child;
+            } else {
+                mergeLists(parent.child, child);
+            }
+            parent.degree++;
+            child.mark = false;
+        }
+
+        private static void mergeLists(FibHeapNode a, FibHeapNode b) {
+            if (a == null || b == null) return;
             FibHeapNode aRight = a.right;
-            a.right = b.right;
-            b.right.left = a;
-            b.right = aRight;
-            aRight.left = b;
+            FibHeapNode bLeft = b.left;
+
+            a.right = b;
+            b.left = a;
+
+            aRight.left = bLeft;
+            bLeft.right = aRight;
         }
 
         private void removeNode(FibHeapNode node) {
             node.left.right = node.right;
             node.right.left = node.left;
-        }
-
-        public boolean isEmpty() {
-            return min == null;
+            node.left = node;
+            node.right = node;
         }
     }
 
+    // Min-Heap Dijkstra using Java PriorityQueue
     public static void minHeapDijkstra(List<List<Edge>> graph, int source) {
         int n = graph.size();
         PriorityQueue<MinHeapNode> pq = new PriorityQueue<>();
@@ -112,34 +234,40 @@ public class UnifiedDijkstra {
         while (!pq.isEmpty()) {
             MinHeapNode current = pq.poll();
             int u = current.vertex;
+            if (current.dist > dist[u]) continue;
 
             for (Edge edge : graph.get(u)) {
                 int v = edge.to;
                 double weight = edge.weight;
-
                 if (dist[u] + weight < dist[v]) {
                     dist[v] = dist[u] + weight;
                     pq.offer(new MinHeapNode(v, dist[v]));
                 }
             }
         }
-
-        //printDistances(dist);
     }
 
+    // Fibonacci Heap Dijkstra with decrease-key and visited check
     public static void fibonacciHeapDijkstra(List<List<Edge>> graph, int source) {
         int n = graph.size();
         double[] dist = new double[n];
+        boolean[] processed = new boolean[n];
         Arrays.fill(dist, Double.POSITIVE_INFINITY);
         dist[source] = 0;
 
         FibonacciHeap fh = new FibonacciHeap();
+        FibHeapNode[] nodes = new FibHeapNode[n];
+
         FibHeapNode sourceNode = new FibHeapNode(source, 0);
+        nodes[source] = sourceNode;
         fh.insert(sourceNode);
 
         while (!fh.isEmpty()) {
             FibHeapNode minNode = fh.extractMin();
             int u = minNode.vertex;
+
+            if (processed[u]) continue;
+            processed[u] = true;
 
             for (Edge edge : graph.get(u)) {
                 int v = edge.to;
@@ -147,100 +275,69 @@ public class UnifiedDijkstra {
 
                 if (dist[u] + weight < dist[v]) {
                     dist[v] = dist[u] + weight;
-                    fh.insert(new FibHeapNode(v, dist[v]));
+                    if (nodes[v] == null) {
+                        nodes[v] = new FibHeapNode(v, dist[v]);
+                        fh.insert(nodes[v]);
+                    } else {
+                        fh.decreaseKey(nodes[v], dist[v]);
+                    }
+                }
+            }
+        }
+    }
+
+    // Unordered list Dijkstra O(V^2)
+    public static void unorderedListDijkstra(List<List<Edge>> graph, int source) {
+        int n = graph.size();
+        double[] dist = new double[n];
+        boolean[] visited = new boolean[n];
+        Arrays.fill(dist, Double.POSITIVE_INFINITY);
+        dist[source] = 0;
+
+        for (int i = 0; i < n; i++) {
+            int u = -1;
+            double minDist = Double.POSITIVE_INFINITY;
+
+            for (int j = 0; j < n; j++) {
+                if (!visited[j] && dist[j] < minDist) {
+                    minDist = dist[j];
+                    u = j;
                 }
             }
 
-            // Consolidation logic for Fibonacci Heap (needed for efficiency)
-            consolidate(fh);
-        }
-    }
+            if (u == -1) break;
+            visited[u] = true;
 
-    private static void consolidate(FibonacciHeap fh) {
-        if (fh.min == null) return;
-
-        Map<Integer, FibHeapNode> degreeMap = new HashMap<>();
-        List<FibHeapNode> roots = new ArrayList<>();
-        FibHeapNode current = fh.min;
-        do {
-            roots.add(current);
-            current = current.right;
-        } while (current != fh.min);
-
-        for (FibHeapNode node : roots) {
-            while (degreeMap.containsKey(node.degree)) {
-                FibHeapNode other = degreeMap.get(node.degree);
-
-                // Link the two nodes with the same degree
-                if (node.distance > other.distance) {
-                    FibHeapNode temp = node;
-                    node = other;
-                    other = temp;
+            for (Edge edge : graph.get(u)) {
+                int v = edge.to;
+                double weight = edge.weight;
+                if (dist[u] + weight < dist[v]) {
+                    dist[v] = dist[u] + weight;
                 }
-
-                link(node, other);
-                degreeMap.remove(node.degree);
-                node.degree++;
-            }
-
-            degreeMap.put(node.degree, node);
-        }
-
-        fh.min = null;
-        for (FibHeapNode node : degreeMap.values()) {
-            if (fh.min == null) {
-                fh.min = node;
-            } else {
-                fh.insert(node);
             }
         }
     }
 
-    private static void link(FibHeapNode minNode, FibHeapNode otherNode) {
-        // Link smaller node as parent of the larger node
-        otherNode.left.right = otherNode.right;
-        otherNode.right.left = otherNode.left;
-
-        otherNode.parent = minNode;
-        if (minNode.child == null) {
-            minNode.child = otherNode;
-            otherNode.right = otherNode;
-            otherNode.left = otherNode;
-        } else {
-            mergeLists(minNode.child, otherNode);
-        }
-        minNode.degree++;
-    }
-
-    private static void mergeLists(FibHeapNode a, FibHeapNode b) {
-        FibHeapNode aRight = a.right;
-        a.right = b.right;
-        b.right.left = a;
-        b.right = aRight;
-        aRight.left = b;
-    }
-
-
-    public static void printDistances(double[] dist) {
-        System.out.println("Shortest distances from source:");
-        for (int i = 0; i < dist.length; i++) {
-            System.out.println("Node " + i + " : " + dist[i]);
-        }
-    }
-
-    public static void run(int V, int[][] edges, boolean useFibonacci) {
-
-        // int V = 5;
-        // int[][] edges = {{0, 1, 10}, {0, 4, 3}, {1, 2, 2}, {2, 3, 9}, {4, 1, 1}, {4, 2, 8}};
-
+    // Run selected mode: "fibonacci", "minheap", "unordered"
+    public static void run(int V, int[][] edges, String mode) {
         List<List<Edge>> graph = new ArrayList<>();
         for (int i = 0; i < V; i++) graph.add(new ArrayList<>());
-        for (int[] e : edges) graph.get(e[0]).add(new Edge(e[1], e[2]));
+        for (int[] e : edges) {
+            graph.get(e[0]).add(new Edge(e[1], e[2]));
+        }
 
-        if (useFibonacci) {
-            fibonacciHeapDijkstra(graph, 0);
-        } else {
-            minHeapDijkstra(graph, 0);
+        switch (mode.toLowerCase()) {
+            case "fibonacci":
+                fibonacciHeapDijkstra(graph, 0);
+                break;
+            case "minheap":
+                minHeapDijkstra(graph, 0);
+                break;
+            case "unordered":
+                unorderedListDijkstra(graph, 0);
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown mode: " + mode);
         }
     }
 }

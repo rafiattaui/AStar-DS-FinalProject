@@ -2,88 +2,89 @@ package dev.rafiattaa;
 
 import java.text.DecimalFormat;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public class Benchmark {
 
-    // Generate random edge list with a fixed number of edges for benchmarking Dijkstra's algorithm
-    public static int[][] GenerateRandomEdge(int v, int numEdges) {
-        Random random = new Random();
-        Set<String> edgeSet = new HashSet<>();
-        List<int[]> edgeList = new ArrayList<>();
+    // Measure performance of a run
+    public static double measurePerformance(int V, int[][] edges, String mode) {
+        long start = System.nanoTime();
+        UnifiedDijkstra.run(V, edges, mode);
+        long end = System.nanoTime();
+        return (end - start) / 1_000_000.0;  // ms
+    }
 
-        // Ensure that the number of edges is feasible (<= V*(V-1))
-        if (numEdges > v * (v - 1)) {
-            throw new IllegalArgumentException("Number of edges cannot be greater than V*(V-1) for a directed graph.");
-        }
+    // Run benchmarks asynchronously
+    public static void benchmarkOnce(int V, int[][] edges) {
+        System.out.println("\nBenchmarking with V = " + V + ", Edges = " + edges.length);
 
-        // Generate random edges
-        while (edgeList.size() < numEdges) {
-            int u = random.nextInt(v);  // Random vertex u (0 to v-1)
-            int ve = random.nextInt(v);  // Random vertex v (0 to v-1)
+        CompletableFuture<Double> fib = CompletableFuture.supplyAsync(() -> {
+            double time = measurePerformance(V, edges, "fibonacci");
+            System.out.println("Fibonacci Heap Runtime: " + format(time) + " ms");
+            return time;
+        });
 
-            // Ensure no self-loop (u != ve)
-            if (u != ve) {
-                // Ensure no duplicate edges (u -> ve and ve -> u are considered same)
-                String edgeKey = u < ve ? u + "-" + ve : ve + "-" + u;
+        CompletableFuture<Double> min = CompletableFuture.supplyAsync(() -> {
+            double time = measurePerformance(V, edges, "minheap");
+            System.out.println("Min Heap Runtime: " + format(time) + " ms");
+            return time;
+        });
 
-                if (!edgeSet.contains(edgeKey)) {
-                    int weight = random.nextInt(10) + 1;  // Random weight between 1 and 10
-                    edgeList.add(new int[] {u, ve, weight});
-                    edgeSet.add(edgeKey);  // Mark this edge as used
-                }
+        CompletableFuture<Double> unord = CompletableFuture.supplyAsync(() -> {
+            double time = measurePerformance(V, edges, "unordered");
+            System.out.println("Unordered Queue Runtime: " + format(time) + " ms");
+            return time;
+        });
+
+        CompletableFuture.allOf(fib, min, unord).join();
+        System.out.println("All runs completed.\n");
+    }
+
+    // Repeat benchmark to get average times
+    public static void test(int V, int numEdges, int maxWeight, int repeats) {
+        double totalFib = 0, totalMin = 0, totalUnord = 0;
+
+        for (int i = 0; i < repeats; i++) {
+            System.out.println("------ Test Run " + (i + 1) + " ------");
+            int[][] edges = EdgeGenerator.generateEdges(V, numEdges, maxWeight);
+
+            try {
+                CompletableFuture<Double> fib = CompletableFuture.supplyAsync(() -> measurePerformance(V, edges, "fibonacci"));
+                CompletableFuture<Double> min = CompletableFuture.supplyAsync(() -> measurePerformance(V, edges, "minheap"));
+                CompletableFuture<Double> unord = CompletableFuture.supplyAsync(() -> measurePerformance(V, edges, "unordered"));
+
+                CompletableFuture.allOf(fib, min, unord).join();
+
+                totalFib += fib.get();
+                totalMin += min.get();
+                totalUnord += unord.get();
+
+                System.out.println("Fibonacci Heap Runtime: " + format(fib.get()) + " ms");
+                System.out.println("Min Heap Runtime: " + format(min.get()) + " ms");
+                System.out.println("Unordered Queue Runtime: " + format(unord.get()) + " ms\n");
+
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
             }
         }
 
-        // Convert List to 2D array for easy use in Dijkstra's algorithm
-        int[][] edgeArray = new int[edgeList.size()][3];
-        for (int i = 0; i < edgeList.size(); i++) {
-            edgeArray[i] = edgeList.get(i);
-        }
-
-        return edgeArray;
+        System.out.println("====== Average Runtimes ======");
+        System.out.println("Fibonacci Heap: " + format(totalFib / repeats) + " ms");
+        System.out.println("Min Heap: " + format(totalMin / repeats) + " ms");
+        System.out.println("Unordered Queue: " + format(totalUnord / repeats) + " ms");
     }
 
-    public static double measurePerformance(int V, int[][] edges, boolean useFibonacci){
-        // Capture the start time in nanoseconds
-        long startTime = System.nanoTime();
-
-        // Run the Dijkstra algorithm using the given parameters
-        UnifiedDijkstra.run(V, edges, useFibonacci);
-
-        // Capture the end time in nanoseconds
-        long endTime = System.nanoTime();
-
-        // Calculate the time taken and return it
-        double timeTaken = (endTime - startTime) / 1_000_000.0;
-        DecimalFormat df = new DecimalFormat("#.##");
-        return Double.parseDouble(df.format(timeTaken));
-        }
-
-    // Simple benchmark test with fixed number of edges
-    public static void test(int V, int numEdges, int repeats) {
-        for (int i = 0; i < repeats; i++) {
-            int[][] edges = GenerateRandomEdge(V, numEdges);
-
-            // Print the generated edges for verification
-            System.out.println("Run " + (i + 1) + ":");
-            //for (int[] edge : edges) {
-            //System.out.println(Arrays.toString(edge));
-            //}
-                System.out.println();
-                double fibTime = measurePerformance(V, edges, true);
-                System.out.println("Fibonacci Heap Runtime: " + fibTime + "ms\n");
-
-                double minTime = measurePerformance(V, edges, false);
-                System.out.println("Min Heap Runtime: " + minTime +"ms\n");
-
-        }
+    private static String format(double value) {
+        return new DecimalFormat("#.##").format(value);
     }
 
     public static void main(String[] args) {
-        int V = 40;  // Number of vertices
-        int numEdges = 50;  // Number of edges
-        int repeats = 1;  // Number of times to repeat the test
+        int V = 5000;
+        int numEdges = 50000;
+        int maxWeight = 2;
+        int repeats = 3;
 
-        test(V, numEdges, repeats);  // Run the benchmark test
+        test(V, numEdges, maxWeight, repeats);
     }
 }
