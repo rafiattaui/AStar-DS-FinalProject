@@ -1,7 +1,7 @@
 package dev.rafiattaa;
 import java.util.*;
 
-public class EdgeGenerator {
+public class DjikstraEdgeGenerator {
 
     /**
      * Generates a list of edges for a directed weighted graph.

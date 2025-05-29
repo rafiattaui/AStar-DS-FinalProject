@@ -1,7 +1,6 @@
 package dev.rafiattaa;
 
 import java.text.DecimalFormat;
-import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -47,7 +46,7 @@ public class Benchmark {
 
         for (int i = 0; i < repeats; i++) {
             System.out.println("------ Test Run " + (i + 1) + " ------");
-            int[][] edges = EdgeGenerator.generateEdges(V, numEdges, maxWeight);
+            int[][] edges = DjikstraEdgeGenerator.generateEdges(V, numEdges, maxWeight);
 
             try {
                 CompletableFuture<Double> fib = CompletableFuture.supplyAsync(() -> measurePerformance(V, edges, "fibonacci"));
