@@ -1,4 +1,4 @@
-package dev.rafiattaa;
+package dev.rafiattaa.djikstra;
 import java.util.*;
 
 public class DjikstraEdgeGenerator {
